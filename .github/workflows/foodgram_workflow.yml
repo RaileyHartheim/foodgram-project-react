@@ -2,6 +2,7 @@ name: Foodgram workflow
 
 on: [push]
 
+jobs:
   send_message:
     runs-on: ubuntu-latest
     needs: deploy
