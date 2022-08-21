@@ -22,9 +22,9 @@ INSTALLED_APPS = [
     'rest_framework',
     'rest_framework.authtoken',
     'djoser',
-    'api',
-    'recipes',
-    'users'
+    'api.apps.ApiConfig',
+    'recipes.apps.RecipesConfig',
+    'users.apps.UsersConfig'
 ]
 
 MIDDLEWARE = [
