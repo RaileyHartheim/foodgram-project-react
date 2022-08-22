@@ -8,20 +8,6 @@ SUCCESS_MSG = 'Тэги выгружены.'
 FAILURE_MSG = 'Выгрузка тэгов прошла неудачно.'
 
 
-TAGS = [
-    ['Завтрак', '#CDDC39', 'breakfast'],
-    ['Обед', '#FF9800', 'dinner'],
-    ['Ужин', '#FFEB3B', 'supper'],
-    ['Супы и бульоны', '#F44336', 'soups'],
-    ['Основные блюда', '#3F51B5', 'maindishes'],
-    ['Салаты', '#009688', 'salads'],
-    ['Закуски', '#9C27B0', 'starters'],
-    ['Десерты', '#E91E63', 'desserts'],
-    ['Напитки', '#4CAF50', 'drinks'],
-    ['Соусы', '#795548', 'sauces']
-]
-
-
 class Command(BaseCommand):
     help = 'Загрузка тэгов'
 
