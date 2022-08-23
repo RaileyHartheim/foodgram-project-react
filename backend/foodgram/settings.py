@@ -5,7 +5,7 @@ BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
 load_dotenv()
 
-SECRET_KEY = '9@dyv!@5iv=)rqm8eyoao%ll!5=j2$tcmt*^_%s5ckylyjj49t'
+SECRET_KEY = os.getenv('SECRET_KEY')
 
 DEBUG = True
 
@@ -21,6 +21,7 @@ INSTALLED_APPS = [
     'django.contrib.staticfiles',
     'rest_framework',
     'rest_framework.authtoken',
+    'django_filters',
     'djoser',
     'api.apps.ApiConfig',
     'recipes.apps.RecipesConfig',
