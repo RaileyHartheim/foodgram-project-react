@@ -1,6 +1,7 @@
 from django.contrib.auth import get_user_model
 from djoser.serializers import UserCreateSerializer, UserSerializer
 from rest_framework import serializers
+from recipes.models import Tag
 from users.models import Subscription
 
 
@@ -32,3 +33,9 @@ class CustomUserSerializer(UserSerializer):
         if obj == user or user.is_anonymous:
             return False
         return Subscription.objects.filter(author=obj, user=user).exists()
+
+
+class TagSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Tag
+        fields = ('id', 'name', 'color', 'slug')
