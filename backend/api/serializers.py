@@ -1,4 +1,3 @@
-from xml.dom import ValidationErr
 from django.contrib.auth import get_user_model
 from django.shortcuts import get_object_or_404
 from djoser.serializers import UserCreateSerializer, UserSerializer
@@ -129,7 +128,7 @@ class RecipeCreateSerializer(serializers.ModelSerializer):
                 Ingredient, id=item['id']
             )
             if ingredient in ingredients_list:
-                raise ValidationErr(
+                raise serializers.ValidationError(
                     'Нельзя добавлять ингредиент дважды!'
                 )
             ingredients_list.append(ingredient)
