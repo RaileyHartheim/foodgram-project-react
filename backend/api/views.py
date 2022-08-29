@@ -1,5 +1,10 @@
 from django.contrib.auth import get_user_model
+from django.db.models import Sum
+from django.http import FileResponse
 from django.shortcuts import get_object_or_404
+from io import BytesIO
+from reportlab.lib.pagesizes import A4
+from reportlab.pdfgen import canvas
 from rest_framework import status, viewsets
 from rest_framework.decorators import action
 from rest_framework.permissions import AllowAny, IsAuthenticated, SAFE_METHODS
@@ -20,6 +25,8 @@ User = get_user_model()
 
 
 class TagViewSet(viewsets.ReadOnlyModelViewSet):
+    """ Вьюсет для просмотра тэгов. """
+
     queryset = Tag.objects.all()
     permission_classes = (AllowAny,)
     serializer_class = TagSerializer
@@ -27,6 +34,8 @@ class TagViewSet(viewsets.ReadOnlyModelViewSet):
 
 
 class IngredientViewSet(viewsets.ReadOnlyModelViewSet):
+    """Вьюсет для просмотра ингредиентов. """
+
     queryset = Ingredient.objects.all()
     permission_classes = (AllowAny,)
     serializer_class = IngredientSerializer
@@ -34,6 +43,8 @@ class IngredientViewSet(viewsets.ReadOnlyModelViewSet):
 
 
 class RecipeViewSet(viewsets.ModelViewSet):
+    """ Вьюсет для работы с рецептами. """
+
     queryset = Recipe.objects.all()
     permission_classes = (IsAdminOrAuthorOrReadOnly,)
     filterset_class = RecipeFilter
@@ -54,6 +65,8 @@ class RecipeViewSet(viewsets.ModelViewSet):
         permission_classes=[IsAuthenticated]
     )
     def favorite(self, request, pk=None):
+        """ Добавление/удаление рецептов в избранном. """
+
         recipe = get_object_or_404(Recipe, pk=pk)
         user = self.request.user
         in_favorite = Favorite.objects.filter(
@@ -87,6 +100,8 @@ class RecipeViewSet(viewsets.ModelViewSet):
         permission_classes=[IsAuthenticated]
     )
     def shopping_cart(self, request, pk=None):
+        """ Добавление/удаление рецептов в списке покупок. """
+
         recipe = get_object_or_404(Recipe, pk=pk)
         user = self.request.user
         is_in_shopping_cart = ShoppingCart.objects.filter(
@@ -116,8 +131,47 @@ class RecipeViewSet(viewsets.ModelViewSet):
             is_in_shopping_cart.delete()
             return Response(status=status.HTTP_204_NO_CONTENT)
 
+    @action(
+        methods=['get'], detail=False,
+        permission_classes=[IsAuthenticated]
+    )
+    def download_shopping_cart(self, request):
+        """ Скачивание списка покупок. """
+
+        buffer = BytesIO()
+        pdf_obj = canvas.Canvas(buffer, pagesize=A4)
+        pdf_obj.setFont('Helvetica', 16)
+        queryset = request.user.shopping_cart.recipe.values(
+            'ingredients__name',
+            'ingredients__measurement_unit'
+        ).annotate(amount=Sum('recipe__amount')).order_by('ingredients__name')
+        pdf_title = 'Список покупок'
+        title_x_coord = 260
+        title_y_coord = 800
+        x_coord = 50
+        y_coord = 780
+        pdf_obj.drawCentredString(title_x_coord, title_y_coord, pdf_title)
+        for item in queryset:
+            pdf_obj.setFontSize(14)
+            pdf_obj.drawString(
+                x_coord, y_coord,
+                f"{item['ingredients__name']}, - "
+                f"{item['amount']} {item['ingredients__measurement_unit']}"
+            )
+            y_coord -= 15
+            if y_coord < 30:
+                pdf_obj.showPage()
+                y_coord = 800
+        pdf_obj.showPage()
+        pdf_obj.save()
+        buffer.seek(0)
+        return FileResponse(buffer, as_attachment=True,
+                            filename='shopping_cart.pdf')
+
 
 class CreateDeleteSubscriptionView(viewsets.ModelViewSet):
+    """ Создание/удаление подписки на пользователя. """
+
     serializer_class = ManageSubscribtionSerializer
     permission_classes = [IsAuthenticated]
 
@@ -146,6 +200,8 @@ class CreateDeleteSubscriptionView(viewsets.ModelViewSet):
 
 
 class SubscriptionsListView(viewsets.ModelViewSet):
+    """ Просмотр подписок. """
+
     serializer_class = SubscriptionsSerializer
     permission_classes = [IsAuthenticated]
 
