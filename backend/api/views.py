@@ -1,25 +1,33 @@
+from io import BytesIO
+
+from django.conf import settings
 from django.contrib.auth import get_user_model
 from django.db.models import Sum
+from django.db.models.expressions import Exists, OuterRef
 from django.http import FileResponse
 from django.shortcuts import get_object_or_404
-from io import BytesIO
+
+from reportlab import rl_config
 from reportlab.lib.pagesizes import A4
+from reportlab.pdfbase import pdfmetrics
+from reportlab.pdfbase.ttfonts import TTFont
 from reportlab.pdfgen import canvas
-from rest_framework import status, viewsets
+from rest_framework import generics, status, views, viewsets
 from rest_framework.decorators import action
-from rest_framework.permissions import AllowAny, IsAuthenticated, SAFE_METHODS
+from rest_framework.permissions import SAFE_METHODS, AllowAny, IsAuthenticated
 from rest_framework.response import Response
 
-from recipes.models import Favorite, Ingredient, Recipe, ShoppingCart, Tag
+from recipes.models import (Favorite, Ingredient, Recipe, RecipeIngredient,
+                            ShoppingCart, Tag)
 from users.models import Subscription
 
 from .filters import IngredientFilter, RecipeFilter
+from .paginations import SubscriptionPagination
 from .permissions import IsAdminOrAuthorOrReadOnly
 from .serializers import (FavAndShoppingCartSerializer, IngredientSerializer,
-                          ManageSubscribtionSerializer, RecipeCreateSerializer,
-                          RecipeListSerializer, SubscriptionsSerializer,
+                          RecipeCreateSerializer, RecipeListSerializer,
+                          SubscribeSerializer, SubscriptionListSerializer,
                           TagSerializer)
-
 
 User = get_user_model()
 
@@ -40,6 +48,7 @@ class IngredientViewSet(viewsets.ReadOnlyModelViewSet):
     permission_classes = (AllowAny,)
     serializer_class = IngredientSerializer
     filterset_class = IngredientFilter
+    pagination_class = None
 
 
 class RecipeViewSet(viewsets.ModelViewSet):
@@ -49,15 +58,25 @@ class RecipeViewSet(viewsets.ModelViewSet):
     permission_classes = (IsAdminOrAuthorOrReadOnly,)
     filterset_class = RecipeFilter
 
+    def get_queryset(self):
+        user = self.request.user
+        if user.is_authenticated:
+            return Recipe.objects.annotate(
+                is_favorited=Exists(Favorite.objects.filter(
+                    user=user, recipe=OuterRef('id'))
+                ),
+                is_in_shopping_cart=Exists(ShoppingCart.objects.filter(
+                    user=user, recipe=OuterRef('id'))
+                )
+            ).select_related('author',)
+        return Recipe.objects.all()
+
     def get_serializer_class(self):
         if self.request.method in SAFE_METHODS:
             return RecipeListSerializer
         return RecipeCreateSerializer
 
     def perform_create(self, serializer):
-        serializer.save(author=self.request.user)
-
-    def perform_update(self, serializer):
         serializer.save(author=self.request.user)
 
     @action(
@@ -139,29 +158,39 @@ class RecipeViewSet(viewsets.ModelViewSet):
         """ Скачивание списка покупок. """
 
         buffer = BytesIO()
+        rl_config.TTFSearchPath.append(str(settings.BASE_DIR) + '/data')
+        pdfmetrics.registerFont(TTFont('FreeSans', 'FreeSans.ttf'))
         pdf_obj = canvas.Canvas(buffer, pagesize=A4)
-        pdf_obj.setFont('Helvetica', 16)
-        queryset = request.user.shopping_cart.recipe.values(
-            'ingredients__name',
-            'ingredients__measurement_unit'
-        ).annotate(amount=Sum('recipe__amount')).order_by('ingredients__name')
+        pdf_obj.setFont('FreeSans', 20)
+        queryset = RecipeIngredient.objects.filter(
+            recipe__shopping_cart__user=request.user).values(
+                'ingredient__name',
+                'ingredient__measurement_unit'
+                ).annotate(total_amount=Sum('amount'))
         pdf_title = 'Список покупок'
         title_x_coord = 260
         title_y_coord = 800
         x_coord = 50
         y_coord = 780
-        pdf_obj.drawCentredString(title_x_coord, title_y_coord, pdf_title)
-        for item in queryset:
-            pdf_obj.setFontSize(14)
-            pdf_obj.drawString(
-                x_coord, y_coord,
-                f"{item['ingredients__name']}, - "
-                f"{item['amount']} {item['ingredients__measurement_unit']}"
-            )
-            y_coord -= 15
-            if y_coord < 30:
-                pdf_obj.showPage()
-                y_coord = 800
+        if queryset:
+            pdf_obj.drawCentredString(title_x_coord, title_y_coord, pdf_title)
+            for item in queryset:
+                pdf_obj.setFontSize(14)
+                pdf_obj.drawString(
+                    x_coord, y_coord,
+                    f"{item['ingredient__name']} - "
+                    f"{item['total_amount']} "
+                    f"{item['ingredient__measurement_unit']}"
+                )
+                y_coord -= 15
+                if y_coord < 30:
+                    pdf_obj.showPage()
+                    y_coord = 800
+        else:
+            pdf_obj.drawCentredString(
+                title_x_coord,
+                title_y_coord,
+                'Список покупок пуст.')
         pdf_obj.showPage()
         pdf_obj.save()
         buffer.seek(0)
@@ -169,41 +198,36 @@ class RecipeViewSet(viewsets.ModelViewSet):
                             filename='shopping_cart.pdf')
 
 
-class CreateDeleteSubscriptionView(viewsets.ModelViewSet):
-    """ Создание/удаление подписки на пользователя. """
-
-    serializer_class = ManageSubscribtionSerializer
+class SubscriptionListView(generics.ListAPIView):
+    """ Отображение подписок. """
+    pagination_class = SubscriptionPagination
     permission_classes = [IsAuthenticated]
 
-    def create(self, request, *args, **kwargs):
-        user = self.request.user
-        author_id = self.kwargs.get('id')
-        author = get_object_or_404(User, pk=author_id)
-        is_subscribed = Subscription.objects.filter(
-            user=user, author=author).exists()
-        if user == author:
-            data = {'errors': 'Вы не можете подписаться на самого себя.'}
-            return Response(status=status.HTTP_400_BAD_REQUEST, data=data)
-        if is_subscribed:
-            data = {'errors': 'Вы уже подписались на этого автора.'}
-            return Response(status=status.HTTP_400_BAD_REQUEST, data=data)
-        Subscription.objects.create(user=user, author=author)
-        return Response(status=status.HTTP_201_CREATED)
+    def get(self, request):
+        user = request.user
+        queryset = User.objects.filter(following__user=user)
+        page = self.paginate_queryset(queryset)
+        serializer = SubscriptionListSerializer(
+            page, many=True, context={'request': request})
+        return self.get_paginated_response(serializer.data)
 
-    @action(methods=['DELETE'], detail=False)
-    def delete(self, request, *args, **kwargs):
-        user = self.request.user
-        author_id = self.kwargs.get('id')
-        author = get_object_or_404(User, pk=author_id)
-        Subscription.objects.filter(user=user, author=author).delete()
+
+class SubscriptionManagementView(views.APIView):
+    """ Подписка/отписка от другого пользователя. """
+
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request, id):
+        data = {'author': id, 'user': request.user.id}
+        serializer = SubscribeSerializer(
+            data=data, context={'request': request})
+        serializer.is_valid(raise_exception=True)
+        serializer.save()
+        return Response(serializer.data, status=status.HTTP_201_CREATED)
+
+    def delete(self, request, id):
+        user = request.user
+        author = get_object_or_404(User, id=id)
+        follow = get_object_or_404(Subscription, user=user, author=author,)
+        follow.delete()
         return Response(status=status.HTTP_204_NO_CONTENT)
-
-
-class SubscriptionsListView(viewsets.ModelViewSet):
-    """ Просмотр подписок. """
-
-    serializer_class = SubscriptionsSerializer
-    permission_classes = [IsAuthenticated]
-
-    def get_queryset(self):
-        return Subscription.objects.filter(user=self.request.user)
