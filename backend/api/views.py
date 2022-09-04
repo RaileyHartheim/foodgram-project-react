@@ -22,7 +22,7 @@ from recipes.models import (Favorite, Ingredient, Recipe, RecipeIngredient,
 from users.models import Subscription
 
 from .filters import IngredientFilter, RecipeFilter
-from .paginations import SubscriptionPagination
+from .paginations import CustomPageNumberPagination
 from .permissions import IsAdminOrAuthorOrReadOnly
 from .serializers import (FavAndShoppingCartSerializer, IngredientSerializer,
                           RecipeCreateSerializer, RecipeListSerializer,
@@ -55,8 +55,9 @@ class RecipeViewSet(viewsets.ModelViewSet):
     """ Вьюсет для работы с рецептами. """
 
     queryset = Recipe.objects.all()
-    permission_classes = (IsAdminOrAuthorOrReadOnly,)
     filterset_class = RecipeFilter
+    pagination_class = CustomPageNumberPagination
+    permission_classes = (IsAdminOrAuthorOrReadOnly,)
 
     def get_queryset(self):
         user = self.request.user
@@ -200,7 +201,7 @@ class RecipeViewSet(viewsets.ModelViewSet):
 
 class SubscriptionListView(generics.ListAPIView):
     """ Отображение подписок. """
-    pagination_class = SubscriptionPagination
+    pagination_class = CustomPageNumberPagination
     permission_classes = [IsAuthenticated]
 
     def get(self, request):
