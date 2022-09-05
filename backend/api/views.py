@@ -1,7 +1,6 @@
 from io import BytesIO
 
 from django.conf import settings
-from django.contrib.auth import get_user_model
 from django.db.models import Sum
 from django.db.models.expressions import Exists, OuterRef
 from django.http import FileResponse
@@ -19,7 +18,7 @@ from rest_framework.response import Response
 
 from recipes.models import (Favorite, Ingredient, Recipe, RecipeIngredient,
                             ShoppingCart, Tag)
-from users.models import Subscription
+from users.models import Subscription, User
 
 from .filters import IngredientFilter, RecipeFilter
 from .paginations import CustomPageNumberPagination
@@ -28,8 +27,6 @@ from .serializers import (FavAndShoppingCartSerializer, IngredientSerializer,
                           RecipeCreateSerializer, RecipeListSerializer,
                           SubscribeSerializer, SubscriptionListSerializer,
                           TagSerializer)
-
-User = get_user_model()
 
 
 class TagViewSet(viewsets.ReadOnlyModelViewSet):
