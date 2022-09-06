@@ -93,11 +93,10 @@ class RecipeViewSet(viewsets.ModelViewSet):
                 if check == 'favorite':
                     created = Favorite.objects.create(
                         user=user, recipe=recipe)
-                    serializer = FavAndShoppingCartSerializer(created.recipe)
                 elif check == 'shopping_cart':
                     created = ShoppingCart.objects.create(
                         user=user, recipe=recipe)
-                    serializer = FavAndShoppingCartSerializer(created.recipe)
+                serializer = FavAndShoppingCartSerializer(created.recipe)
                 return Response(
                     status=status.HTTP_201_CREATED, data=serializer.data)
             else:
