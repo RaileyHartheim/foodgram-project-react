@@ -1,7 +1,6 @@
 from io import BytesIO
 
 from django.conf import settings
-from django.contrib.auth import get_user_model
 from django.db.models import Sum
 from django.db.models.expressions import Exists, OuterRef
 from django.http import FileResponse
@@ -19,7 +18,7 @@ from rest_framework.response import Response
 
 from recipes.models import (Favorite, Ingredient, Recipe, RecipeIngredient,
                             ShoppingCart, Tag)
-from users.models import Subscription
+from users.models import Subscription, User
 
 from .filters import IngredientFilter, RecipeFilter
 from .paginations import CustomPageNumberPagination
@@ -28,8 +27,6 @@ from .serializers import (FavAndShoppingCartSerializer, IngredientSerializer,
                           RecipeCreateSerializer, RecipeListSerializer,
                           SubscribeSerializer, SubscriptionListSerializer,
                           TagSerializer)
-
-User = get_user_model()
 
 
 class TagViewSet(viewsets.ReadOnlyModelViewSet):
@@ -80,6 +77,47 @@ class RecipeViewSet(viewsets.ModelViewSet):
     def perform_create(self, serializer):
         serializer.save(author=self.request.user)
 
+    def make_favorite_shopping_cart_action(self, request, check, pk=None):
+        recipe = get_object_or_404(Recipe, pk=pk)
+        user = self.request.user
+        if user.is_anonymous:
+            return Response(status=status.HTTP_401_UNAUTHORIZED)
+        if check == 'favorite':
+            checked_queryset = Favorite.objects.filter(
+                user=user, recipe=recipe)
+        elif check == 'shopping_cart':
+            checked_queryset = ShoppingCart.objects.filter(
+                user=user, recipe=recipe)
+        if request.method == 'POST':
+            if not checked_queryset:
+                if check == 'favorite':
+                    created = Favorite.objects.create(
+                        user=user, recipe=recipe)
+                elif check == 'shopping_cart':
+                    created = ShoppingCart.objects.create(
+                        user=user, recipe=recipe)
+                serializer = FavAndShoppingCartSerializer(created.recipe)
+                return Response(
+                    status=status.HTTP_201_CREATED, data=serializer.data)
+            else:
+                if check == 'favorite':
+                    data = {'errors': 'Этот рецепт уже в избранном.'}
+                elif check == 'shopping_cart':
+                    data = {'errors': 'Этот рецепт уже в списке покупок.'}
+                return Response(status=status.HTTP_400_BAD_REQUEST, data=data)
+        elif request.method == 'DELETE':
+            if not checked_queryset:
+                if check == 'favorite':
+                    data = {
+                        'errors': 'Этот рецепт не находится в избранном.'}
+                elif check == 'shopping_cart':
+                    data = {
+                        'errors': 'Этот рецепт не находится в списке покупок.'}
+                return Response(status=status.HTTP_400_BAD_REQUEST, data=data)
+            else:
+                checked_queryset.delete()
+                return Response(status=status.HTTP_204_NO_CONTENT)
+
     @action(
         methods=['post', 'delete'], detail=True,
         permission_classes=[IsAuthenticated]
@@ -87,33 +125,8 @@ class RecipeViewSet(viewsets.ModelViewSet):
     def favorite(self, request, pk=None):
         """ Добавление/удаление рецептов в избранном. """
 
-        recipe = get_object_or_404(Recipe, pk=pk)
-        user = self.request.user
-        in_favorite = Favorite.objects.filter(
-            user=user, recipe=recipe
-        )
-        if user.is_anonymous:
-            return Response(status=status.HTTP_401_UNAUTHORIZED)
-        if request.method == 'POST':
-            if not in_favorite:
-                favorite = Favorite.objects.create(
-                    user=user, recipe=recipe
-                )
-                serializer = FavAndShoppingCartSerializer(favorite.recipe)
-                return Response(
-                    status=status.HTTP_201_CREATED, data=serializer.data)
-            data = {'errors': 'Этот рецепт уже в избранном.'}
-            return Response(
-                status=status.HTTP_400_BAD_REQUEST, data=data
-            )
-        elif request.method == 'DELETE':
-            if not in_favorite:
-                data = {'errors': 'Этот рецепт не находится в избранном.'}
-                return Response(
-                    status=status.HTTP_400_BAD_REQUEST, data=data
-                )
-            in_favorite.delete()
-            return Response(status=status.HTTP_204_NO_CONTENT)
+        return self.make_favorite_shopping_cart_action(
+            request, check='favorite', pk=pk)
 
     @action(
         methods=['post', 'delete'], detail=True,
@@ -122,34 +135,8 @@ class RecipeViewSet(viewsets.ModelViewSet):
     def shopping_cart(self, request, pk=None):
         """ Добавление/удаление рецептов в списке покупок. """
 
-        recipe = get_object_or_404(Recipe, pk=pk)
-        user = self.request.user
-        is_in_shopping_cart = ShoppingCart.objects.filter(
-            user=user, recipe=recipe
-        )
-        if user.is_anonymous:
-            return Response(status=status.HTTP_401_UNAUTHORIZED)
-        if request.method == 'POST':
-            if not is_in_shopping_cart:
-                to_cart = ShoppingCart.objects.create(
-                    user=user, recipe=recipe
-                )
-                serializer = FavAndShoppingCartSerializer(to_cart.recipe)
-                return Response(
-                    status=status.HTTP_201_CREATED, data=serializer.data
-                )
-            data = {'errors': 'Этот рецепт уже в списке покупок.'}
-            return Response(
-                status=status.HTTP_400_BAD_REQUEST, data=data
-            )
-        elif request.method == 'DELETE':
-            if not is_in_shopping_cart:
-                data = {'errors': 'Этот рецепт не находится в списке покупок.'}
-                return Response(
-                    status=status.HTTP_400_BAD_REQUEST, data=data
-                )
-            is_in_shopping_cart.delete()
-            return Response(status=status.HTTP_204_NO_CONTENT)
+        return self.make_favorite_shopping_cart_action(
+            request, check='shopping_cart', pk=pk)
 
     @action(
         methods=['get'], detail=False,
