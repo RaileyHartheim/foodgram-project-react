@@ -1,5 +1,5 @@
 ## Foodgram (продуктовый помощник)
-
+![Foodgram workflow](https://github.com/RaileyHartheim/foodgram-project-react/actions/workflows/foodgram_workflow.yml/badge.svg)
 ## Описание проекта
 
 Foodgram - сайт, предназначенный для обмена рецептами. Он позволяет:

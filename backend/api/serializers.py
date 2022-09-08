@@ -87,25 +87,21 @@ class RecipeListSerializer(serializers.ModelSerializer):
         queryset = RecipeIngredient.objects.filter(recipe=obj)
         return RecipeIngredientSerializer(queryset, many=True).data
 
-    def get_custom_model_field(self, obj, checked_model):
+    def __get_custom_model_field(self, obj, checked_model):
         request = self.context.get('request')
         if request.user.is_anonymous:
             return False
-        if checked_model == 'favorite':
-            checked_queryset = Favorite.objects.filter(
-                user=request.user, recipe=obj.id).exists()
-        elif checked_model == 'shopping_cart':
-            checked_queryset = ShoppingCart.objects.filter(
-                user=request.user, recipe=obj.id).exists()
+        checked_queryset = checked_model.objects.filter(
+            user=request.user, recipe=obj.id).exists()
         return checked_queryset
 
     def get_is_favorited(self, obj):
-        return self.get_custom_model_field(
-            obj=obj, checked_model='favorite')
+        return self.__get_custom_model_field(
+            obj=obj, checked_model=Favorite)
 
     def get_is_in_shopping_cart(self, obj):
-        return self.get_custom_model_field(
-            obj=obj, checked_model='shopping_cart')
+        return self.__get_custom_model_field(
+            obj=obj, checked_model=ShoppingCart)
 
 
 class RecipeCreateSerializer(serializers.ModelSerializer):
@@ -199,29 +195,29 @@ class SubscriptionListSerializer(serializers.ModelSerializer):
         fields = ('id', 'email', 'username', 'first_name',
                   'last_name', 'is_subscribed', 'recipes', 'recipes_count')
 
-    def get_custom_model_field(self, obj, checked_model):
+    def __get_user_is_authorized_or_not(self, obj):
         request = self.context.get('request')
-        if request.user.is_anonymous:
+        if not request or request.user.is_anonymous:
             return False
-        if checked_model == 'subscription':
-            checked = Subscription.objects.filter(
+        return True
+
+    def get_is_subscribed(self, obj):
+        request = self.context.get('request')
+        if self.__get_user_is_authorized_or_not(obj) is True:
+            return Subscription.objects.filter(
                 user=request.user, author=obj).exists()
-        elif checked_model == 'recipes':
+
+    def get_recipes(self, obj):
+        request = self.context.get('request')
+        if self.__get_user_is_authorized_or_not(obj) is True:
             context = {'request': request}
             recipes_limit = request.query_params.get('recipes_limit')
             if recipes_limit is not None:
                 recipes = obj.recipes.all()[:int(recipes_limit)]
             else:
                 recipes = obj.recipes.all()
-            checked = FavAndShoppingCartSerializer(
+            return FavAndShoppingCartSerializer(
                 recipes, many=True, context=context).data
-        return checked
-
-    def get_is_subscribed(self, obj):
-        return self.get_custom_model_field(obj, checked_model='subscription')
-
-    def get_recipes(self, obj):
-        return self.get_custom_model_field(obj, checked_model='recipes')
 
     def get_recipes_count(self, obj):
         return obj.recipes.count()
