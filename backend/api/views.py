@@ -77,40 +77,31 @@ class RecipeViewSet(viewsets.ModelViewSet):
     def perform_create(self, serializer):
         serializer.save(author=self.request.user)
 
-    def make_favorite_shopping_cart_action(self, request, check, pk=None):
+    def __make_fav_shop_cart_action(self, request, use_model, pk=None):
         recipe = get_object_or_404(Recipe, pk=pk)
         user = self.request.user
         if user.is_anonymous:
             return Response(status=status.HTTP_401_UNAUTHORIZED)
-        if check == 'favorite':
-            checked_queryset = Favorite.objects.filter(
-                user=user, recipe=recipe)
-        elif check == 'shopping_cart':
-            checked_queryset = ShoppingCart.objects.filter(
-                user=user, recipe=recipe)
+        checked_queryset = use_model.objects.filter(
+            user=user, recipe=recipe)
         if request.method == 'POST':
             if not checked_queryset:
-                if check == 'favorite':
-                    created = Favorite.objects.create(
-                        user=user, recipe=recipe)
-                elif check == 'shopping_cart':
-                    created = ShoppingCart.objects.create(
-                        user=user, recipe=recipe)
+                created = use_model.objects.create(user=user, recipe=recipe)
                 serializer = FavAndShoppingCartSerializer(created.recipe)
                 return Response(
                     status=status.HTTP_201_CREATED, data=serializer.data)
             else:
-                if check == 'favorite':
+                if use_model == Favorite:
                     data = {'errors': 'Этот рецепт уже в избранном.'}
-                elif check == 'shopping_cart':
+                elif use_model == ShoppingCart:
                     data = {'errors': 'Этот рецепт уже в списке покупок.'}
                 return Response(status=status.HTTP_400_BAD_REQUEST, data=data)
         elif request.method == 'DELETE':
             if not checked_queryset:
-                if check == 'favorite':
+                if use_model == Favorite:
                     data = {
                         'errors': 'Этот рецепт не находится в избранном.'}
-                elif check == 'shopping_cart':
+                elif use_model == ShoppingCart:
                     data = {
                         'errors': 'Этот рецепт не находится в списке покупок.'}
                 return Response(status=status.HTTP_400_BAD_REQUEST, data=data)
@@ -125,8 +116,8 @@ class RecipeViewSet(viewsets.ModelViewSet):
     def favorite(self, request, pk=None):
         """ Добавление/удаление рецептов в избранном. """
 
-        return self.make_favorite_shopping_cart_action(
-            request, check='favorite', pk=pk)
+        return self.__make_fav_shop_cart_action(
+            request, use_model=Favorite, pk=pk)
 
     @action(
         methods=['post', 'delete'], detail=True,
@@ -135,8 +126,8 @@ class RecipeViewSet(viewsets.ModelViewSet):
     def shopping_cart(self, request, pk=None):
         """ Добавление/удаление рецептов в списке покупок. """
 
-        return self.make_favorite_shopping_cart_action(
-            request, check='shopping_cart', pk=pk)
+        return self.__make_fav_shop_cart_action(
+            request, use_model=ShoppingCart, pk=pk)
 
     @action(
         methods=['get'], detail=False,
@@ -153,8 +144,8 @@ class RecipeViewSet(viewsets.ModelViewSet):
         queryset = RecipeIngredient.objects.filter(
             recipe__shopping_cart__user=request.user).values(
                 'ingredient__name',
-                'ingredient__measurement_unit'
-                ).annotate(total_amount=Sum('amount'))
+                'ingredient__measurement_unit').annotate(
+                    total_amount=Sum('amount'))
         pdf_title = 'Список покупок'
         title_x_coord = 260
         title_y_coord = 800
