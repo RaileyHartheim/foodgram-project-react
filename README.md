@@ -11,6 +11,16 @@ Foodgram - сайт, предназначенный для обмена реце
 
 
 Бэкенд реализован на Django 3.2.10 и Django REST Framework 3.12.4.
+
+### Адрес сайта
+
+http://158.160.4.128/recipes
+
+### Суперпользователь
+
+- Логин (email): admin@foodgram.com
+- Пароль: adminpassword
+
 ## Установка проекта
 Все нижеперечисленные команды указаны для терминала bash
 ### Алгоритм действий
@@ -35,13 +45,13 @@ sudo docker-compose up -d --build
 ```
 - Выполнить следующие команды:
 ```
-docker-compose exec backend python manage.py collectstatic --no-input
-docker-compose exec backend python manage.py migrate
+docker-compose exec -T backend python manage.py collectstatic --no-input
+docker-compose exec -T backend python manage.py migrate
 ```
 - При необходимости выгрузить ингредиенты и тэги:
 ```
-sudo docker-compose exec backend python manage.py add_ingredients
-sudo docker-compose exec backend python manage.py add_tags
+sudo docker-compose exec -T backend python manage.py add_ingredients
+sudo docker-compose exec -T backend python manage.py add_tags
 ```
 - Создать суперпользователя:
 ```
@@ -53,7 +63,7 @@ sudo docker-compose exec backend python manage.py createsuperuser
 sudo docker-compose down -v
 ```
 ## Документация к API
-Доступна по следующему адресу после запуска сервера
+Доступна по следующему адресу после запуска сервера (адрес указан для dev-режима)
 ```
 http://127.0.0.1/api/docs/
 ```
