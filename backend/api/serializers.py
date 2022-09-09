@@ -197,9 +197,7 @@ class SubscriptionListSerializer(serializers.ModelSerializer):
 
     def __get_user_is_authorized_or_not(self, obj):
         request = self.context.get('request')
-        if not request or request.user.is_anonymous:
-            return False
-        return True
+        return request and request.user.is_authenticated
 
     def get_is_subscribed(self, obj):
         request = self.context.get('request')
@@ -212,10 +210,9 @@ class SubscriptionListSerializer(serializers.ModelSerializer):
         if self.__get_user_is_authorized_or_not(obj) is True:
             context = {'request': request}
             recipes_limit = request.query_params.get('recipes_limit')
+            recipes = obj.recipes.all()
             if recipes_limit is not None:
-                recipes = obj.recipes.all()[:int(recipes_limit)]
-            else:
-                recipes = obj.recipes.all()
+                recipes = recipes[:int(recipes_limit)]
             return FavAndShoppingCartSerializer(
                 recipes, many=True, context=context).data
 
